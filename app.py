@@ -34,7 +34,11 @@ HTML_TEMPLATE = """
         .btn { border: none; padding: 10px 15px; border-radius: 8px; font-weight: bold; cursor: pointer; text-decoration: none; }
         .btn-folder { background: #333; color: #fff; }
         .btn-action { background: #32d74b; color: #000; }
+        .btn-done { background: #1b5e20; color: #a5d6a7; border: 1px solid #2e7d32; }
         
+        .badge { font-size: 0.7em; padding: 2px 6px; border-radius: 4px; margin-left: 5px; vertical-align: middle; }
+        .badge-ok { background: #4caf50; color: #000; font-weight:bold; }
+
         /* PANTALLA PROGRESO */
         #overlay {
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -67,10 +71,19 @@ HTML_TEMPLATE = """
     {% for file in files %}
     <div class="item">
         <div>
-            <strong>{{ file.name }}</strong><br>
+            <strong>{{ file.name }}</strong>
+            {% if file.is_done %}
+                <span class="badge badge-ok">✅ LISTO</span>
+            {% endif %}
+            <br>
             <small style="color:#888">{{ file.size }} MB</small>
         </div>
-        <button class="btn btn-action" onclick="startConvert('{{ current_path }}/{{ file.name }}')">COMPRIMIR</button>
+        
+        {% if file.is_done %}
+            <button class="btn btn-done" onclick="startConvert('{{ current_path }}/{{ file.name }}')">RE-HACER</button>
+        {% else %}
+            <button class="btn btn-action" onclick="startConvert('{{ current_path }}/{{ file.name }}')">COMPRIMIR</button>
+        {% endif %}
     </div>
     {% endfor %}
 
@@ -157,13 +170,28 @@ def home(): return browse(BASE_DIR)
 def browse():
     path = request.args.get('path', BASE_DIR)
     if not path.startswith(BASE_DIR): path = BASE_DIR
+    
     folders, files = [], []
     try:
-        for item in sorted(os.listdir(path)):
+        # Primero escaneamos qué archivos YA existen (los que terminan en _social.mp4)
+        all_items = os.listdir(path)
+        existing_socials = {f for f in all_items if f.endswith('_social.mp4')}
+
+        for item in sorted(all_items):
             full = os.path.join(path, item)
-            if os.path.isdir(full): folders.append(item)
+            if os.path.isdir(full): 
+                folders.append(item)
+            # Solo mostramos los originales (MP4/MOV) que NO son los comprimidos
             elif item.lower().endswith(('.mp4', '.mov')) and not item.endswith('_social.mp4'):
-                files.append({'name': item, 'size': round(os.path.getsize(full)/1048576, 1)})
+                # Verificamos si este original ya tiene su pareja
+                social_name = os.path.splitext(item)[0] + "_social.mp4"
+                is_done = social_name in existing_socials
+                
+                files.append({
+                    'name': item, 
+                    'size': round(os.path.getsize(full)/1048576, 1),
+                    'is_done': is_done
+                })
     except: pass
     return render_template_string(HTML_TEMPLATE, folders=folders, files=files, current_path=path, base_dir=BASE_DIR)
 
